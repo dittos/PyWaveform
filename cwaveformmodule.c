@@ -20,26 +20,11 @@ cwaveform_draw(PyObject * self, PyObject * args, PyObject * keywds)
     char * outImageFile;
     long imageWidth;
     long imageHeight;
-    unsigned char bgColorRed;
-    unsigned char bgColorGreen;
-    unsigned char bgColorBlue;
-    unsigned char bgColorAlpha;
-    unsigned char fgGradientCenterRed;
-    unsigned char fgGradientCenterGreen;
-    unsigned char fgGradientCenterBlue;
-    unsigned char fgGradientCenterAlpha;
-    unsigned char fgGradientOuterRed;
-    unsigned char fgGradientOuterGreen;
-    unsigned char fgGradientOuterBlue;
-    unsigned char fgGradientOuterAlpha;
     char cheat; //bool
 
     // get arguments
-    if (!PyArg_ParseTuple(args, "ssllbbbbbbbbbbbbb",
+    if (!PyArg_ParseTuple(args, "ssllb",
         &inAudioFile, &outImageFile, &imageWidth, &imageHeight,
-        &bgColorRed, &bgColorGreen, &bgColorBlue, &bgColorAlpha,
-        &fgGradientCenterRed, &fgGradientCenterGreen, &fgGradientCenterBlue, &fgGradientCenterAlpha,
-        &fgGradientOuterRed, &fgGradientOuterGreen, &fgGradientOuterBlue, &fgGradientOuterAlpha,
         &cheat))
     {
         return NULL;
@@ -128,36 +113,20 @@ cwaveform_draw(PyObject * self, PyObject * args, PyObject * keywds)
     PixelWand * bgPixWand = NewPixelWand();
     PixelWand * fgPixWand = NewPixelWand();
 
-    PixelSetRed(bgPixWand, bgColorRed / (double)UCHAR_MAX);
-    PixelSetGreen(bgPixWand, bgColorGreen / (double)UCHAR_MAX);
-    PixelSetBlue(bgPixWand, bgColorBlue / (double)UCHAR_MAX);
-    PixelSetAlpha(bgPixWand, bgColorAlpha / (double)UCHAR_MAX);
+    PixelSetRed(bgPixWand, 1.0);
+    PixelSetGreen(bgPixWand, 1.0);
+    PixelSetBlue(bgPixWand, 1.0);
+
+    PixelSetRed(fgPixWand, 0.0);
+    PixelSetGreen(fgPixWand, 0.0);
+    PixelSetBlue(fgPixWand, 0.0);
 
     // create image
     MagickNewImage(wand, imageWidth, imageHeight, bgPixWand);
-    MagickSetImageOpacity(wand, bgColorAlpha / (double)UCHAR_MAX);
 
     // create drawing wand
     DrawSetFillColor(draw, fgPixWand);
     DrawSetFillOpacity(draw, 1);
-
-    // gradient calculations
-    double centerY = imageHeight / 2;
-
-    double centerRed = fgGradientCenterRed / (double) UCHAR_MAX;
-    double centerGreen = fgGradientCenterGreen / (double) UCHAR_MAX;
-    double centerBlue = fgGradientCenterBlue / (double) UCHAR_MAX;
-    double centerAlpha = fgGradientCenterAlpha / (double) UCHAR_MAX;
-
-    double outerRed = fgGradientOuterRed / (double) UCHAR_MAX;
-    double outerGreen = fgGradientOuterGreen / (double) UCHAR_MAX;
-    double outerBlue = fgGradientOuterBlue / (double) UCHAR_MAX;
-    double outerAlpha = fgGradientOuterAlpha / (double) UCHAR_MAX;
-
-    double deltaRed = (outerRed - centerRed) / centerY;
-    double deltaGreen = (outerGreen - centerGreen) / centerY;
-    double deltaBlue = (outerBlue - centerBlue) / centerY;
-    double deltaAlpha = (outerAlpha - centerAlpha) / centerY;
 
     // for each pixel
     int imageBoundY = imageHeight-1;
@@ -198,41 +167,11 @@ cwaveform_draw(PyObject * self, PyObject * args, PyObject * keywds)
         // translate into y pixel coord
         int yMin = (int)((min - sampleMin) / sampleRange * imageBoundY);
         int yMax = (int)((max - sampleMin) / sampleRange * imageBoundY);
-
-        // draw gradient
-        double fgRed = centerRed;
-        double fgGreen = centerGreen;
-        double fgBlue = centerBlue;
-        double fgAlpha = centerAlpha;
-        double yTop = centerY;
-        double yBottom = centerY;
-        while (yBottom >= yMin || yTop <= yMax) {
-            fgRed += deltaRed;
-            fgGreen += deltaGreen;
-            fgBlue += deltaBlue;
-            fgAlpha += deltaAlpha;
-
-            PixelSetRed(fgPixWand, fgRed);
-            PixelSetGreen(fgPixWand, fgGreen);
-            PixelSetBlue(fgPixWand, fgBlue);
-            PixelSetAlpha(fgPixWand, fgAlpha);
-            DrawSetOpacity(draw, fgAlpha);
-            DrawSetFillColor(draw, fgPixWand);
-
-            if (yBottom >= yMin) {
-                DrawPoint(draw, x, yBottom);
-                --yBottom;
-            }
-            
-            if (yTop <= yMax) {
-                DrawPoint(draw, x, yTop);
-                ++yTop;
-            }
-        }
-        
+        DrawRectangle(draw, x, yMin, x+1, yMax);
     }
     // save the image
     MagickDrawImage(wand, draw);
+    MagickTransparentPaintImage(wand, fgPixWand, 0, 0.0, MagickFalse);
     MagickWriteImage(wand, outImageFile);
 
     // clean up
